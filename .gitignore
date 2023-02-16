@@ -1,0 +1,9 @@
+*.pyc
+.coverage
+htmlcov
+MANIFEST
+*.egg-info
+__pycache__
+.pytest_cache
+.devwatchrc.yml
+devwatch.py.bk
