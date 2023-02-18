@@ -16,7 +16,7 @@ from termios import FIONREAD
 import yaml
 
 
-def load_config():
+def load_config(target):
   """Load configuration"""
   conf_name = ".devwatchrc.yml"
   local = Path.joinpath(Path.cwd(), conf_name)
@@ -27,12 +27,33 @@ def load_config():
   elif home.exists():
     conf_file = home
   else:
-    print(f"Create file {conf_name} on home or working directory")
+    print(f"Error: missing {conf_name}. Create file {conf_name} on home or working directory")
     sys.exit(1)
 
   with open(conf_file, "r", encoding="utf-8") as ymlfile:
     cfg = yaml.safe_load(ymlfile)
-  return cfg
+
+  if target and target not in cfg:
+    print(f"Error: invalid target: {target}")
+    sys.exit(1)
+
+  if not target:  # Get first target as default
+    if len(cfg.keys()) > 0:
+        target = list(cfg.keys())[0]
+    else:
+        print(f"Error: empty {conf_name} files.")
+        sys.exit(1)
+
+  if "files" not in cfg[target]:
+    print("Error: missing `files` entry for target: {target}")
+    sys.exit(1)
+  if "command" not in cfg[target]:
+    print("Error: missing `command` entry for target: {target}")
+    sys.exit(1)
+
+  files = cfg[target]["files"]
+  command = cfg[target]["command"]
+  return files, command
 
 
 def libc_call(function, *args):
@@ -60,15 +81,14 @@ def read_all(fd):
 
 def main(target):
   """Main function"""
-  cfg = load_config()
-
-  if not target:  # Get first target as default
-    target = list(cfg.keys())[0]
-  files = cfg[target]["files"]
-  command = cfg[target]["command"]
+  files, command = load_config(target)
 
   if not os.path.exists(files):
-    raise ValueError(f"Path not found: {files}")
+    print(
+        f"Error: invalid target: {target}."
+        f"Path not found: {files}. Check {conf_name}"
+    )
+    sys.exit(1)
 
   libc_so = find_library("c")
   libc = CDLL(libc_so or "libc.so.6", use_errno=True)
