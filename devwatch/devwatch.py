@@ -1,8 +1,10 @@
 """ devwatch """
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
 import subprocess
+import glob
 from ctypes import CDLL, c_int, get_errno
 from ctypes.util import find_library
 from errno import EINTR
@@ -12,22 +14,32 @@ from select import poll
 from struct import calcsize, unpack
 import sys
 from termios import FIONREAD
+import time
 
 import yaml
 
 
+CONF_NAME = ".devwatchrc.yml"
+libc_so = find_library("c")
+libc = CDLL(libc_so or "libc.so.6", use_errno=True)
+EVENT_FMT = "iIII"
+EVENT_SIZE = calcsize(EVENT_FMT)
+IN_MODIFY = 0x00000002
+
 def load_config(target):
   """Load configuration"""
-  conf_name = ".devwatchrc.yml"
-  local = Path.joinpath(Path.cwd(), conf_name)
-  home = Path.joinpath(Path.home(), conf_name)
+  local = Path.joinpath(Path.cwd(), CONF_NAME)
+  home = Path.joinpath(Path.home(), CONF_NAME)
 
   if local.exists():
     conf_file = local
   elif home.exists():
     conf_file = home
   else:
-    print(f"Error: missing {conf_name}. Create file {conf_name} on home or working directory")
+    print(
+        f"Error: missing {CONF_NAME}. "
+        f"Create file {CONF_NAME} on home or working directory"
+    )
     sys.exit(1)
 
   with open(conf_file, "r", encoding="utf-8") as ymlfile:
@@ -41,7 +53,7 @@ def load_config(target):
     if len(cfg.keys()) > 0:
         target = list(cfg.keys())[0]
     else:
-        print(f"Error: empty {conf_name} files.")
+        print(f"Error: empty {CONF_NAME} files.")
         sys.exit(1)
 
   if "files" not in cfg[target]:
@@ -51,9 +63,10 @@ def load_config(target):
     print("Error: missing `command` entry for target: {target}")
     sys.exit(1)
 
-  files = cfg[target]["files"]
+  files = glob.glob(cfg[target]["files"], recursive=True)
+  dirs = list(set([os.path.dirname(file) for file in files]))
   command = cfg[target]["command"]
-  return files, command
+  return dirs, files, command
 
 
 def libc_call(function, *args):
@@ -79,54 +92,61 @@ def read_all(fd):
   return data
 
 
-def main(target):
-  """Main function"""
-  files, command = load_config(target)
-
-  if not os.path.exists(files):
-    print(
-        f"Error: invalid target: {target}."
-        f"Path not found: {files}. Check {conf_name}"
-    )
-    sys.exit(1)
-
-  libc_so = find_library("c")
-  libc = CDLL(libc_so or "libc.so.6", use_errno=True)
-
+def target(dir, files, command):
   fd = libc_call(libc.inotify_init)
 
   poller = poll()
   poller.register(fd)
 
-  encoded_path = files.encode("utf-8")
-  IN_MODIFY = 0x00000002
+  encoded_path = dir.encode("utf-8")
   libc_call(libc.inotify_add_watch, fd, encoded_path, IN_MODIFY)
-
-  EVENT_FMT = "iIII"
-  EVENT_SIZE = calcsize(EVENT_FMT)
 
   while True:
     if poller.poll(None):
       data = read_all(fd)
     if data:
-      # Unpack the first 4 bytes to get namesize
-      _, _, _, namesize = unpack(EVENT_FMT, data[:EVENT_SIZE])
-      ini_pos = EVENT_SIZE
-      end_pos = EVENT_SIZE + namesize
-      name = data[ini_pos:end_pos].split(b"\x00", 1)[0]
-      name = name.decode("utf-8")
+        # Unpack the first 4 bytes to get namesize
+        _, _, _, namesize = unpack(EVENT_FMT, data[:EVENT_SIZE])
+        ini_pos = EVENT_SIZE
+        end_pos = EVENT_SIZE + namesize
+        name = data[ini_pos:end_pos].split(b"\x00", 1)[0]
+        name = name.decode("utf-8")
 
-      if os.path.isdir(files):
-         parameters = str(os.path.join(files, name))
-         if "@" in command:
-            command = command.replace("@", parameters)
-      else:
-         parameters = files
+        if name:
+          file_path = str(os.path.join(dir, name))
+          if file_path in files:
+              if "@" in command:
+                  execute = command.replace("@", file_path)
+              else:
+                  execute = command
 
-      subprocess.run("clear", shell=True, check=False)
-      subprocess.run(command, shell=True, check=False)
+              subprocess.run("clear", shell=True, check=False)
+              subprocess.run(execute, shell=True, check=False)
 
-      libc_call(libc.inotify_add_watch, fd, encoded_path, IN_MODIFY)
+              libc_call(libc.inotify_add_watch, fd, encoded_path, IN_MODIFY)
+
+
+def _start(dirs, files, command):
+    MAX_DIRS = 100
+    _dirs = dirs[:MAX_DIRS]
+    workers = len(_dirs)
+
+    with ThreadPoolExecutor(max_workers=workers + 1) as executor:
+        futures = [executor.submit(target, dir, files, command) for dir in _dirs]
+
+
+def main(target):
+  """Main function"""
+  dirs, files, command = load_config(target)
+
+  if not files:
+    print(
+        f"Error: invalid target: {target}."
+        f"Path not found: {files}. Check {CONF_NAME}"
+    )
+    sys.exit(1)
+
+  _start(dirs, files, command)
 
 
 if __name__ == "__main__":
