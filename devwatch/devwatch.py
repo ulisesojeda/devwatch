@@ -1,10 +1,12 @@
 """ devwatch """
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
+import glob
 import os
 import subprocess
-import glob
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor
 from ctypes import CDLL, c_int, get_errno
 from ctypes.util import find_library
 from errno import EINTR
@@ -12,11 +14,9 @@ from fcntl import ioctl
 from pathlib import Path
 from select import poll
 from struct import calcsize, unpack
-import sys
 from termios import FIONREAD
 
 import yaml
-
 
 CONF_NAME = ".devwatchrc.yml"
 libc_so = find_library("c")
@@ -78,6 +78,7 @@ def libc_call(function, *args):
         errno = get_errno()
         print(f"ERRNO: {errno}")
         if errno != EINTR:
+            print(f"ERRNO: {errno}")
             raise OSError(errno, os.strerror(errno))
 
 
@@ -93,33 +94,38 @@ def read_all(fd):
 
 
 def target(dir, files, command):
-    fd = libc_call(libc.inotify_init)
+    try:
+        fd = libc_call(libc.inotify_init)
+        poller = poll()
+        poller.register(fd)
 
-    poller = poll()
-    poller.register(fd)
+        encoded_path = dir.encode("utf-8")
+        libc_call(libc.inotify_add_watch, fd, encoded_path, IN_MODIFY)
 
-    encoded_path = dir.encode("utf-8")
-    libc_call(libc.inotify_add_watch, fd, encoded_path, IN_MODIFY)
+        while True:
+            data = None
+            if poller.poll(None):
+                data = read_all(fd)
+            if data:
+                # Unpack the first 4 bytes to get namesize
+                _, _, _, namesize = unpack(EVENT_FMT, data[:EVENT_SIZE])
+                ini_pos = EVENT_SIZE
+                end_pos = EVENT_SIZE + namesize
+                name = data[ini_pos:end_pos].split(b"\x00", 1)[0]
+                name = name.decode("utf-8")
 
-    while True:
-        if poller.poll(None):
-            data = read_all(fd)
-        if data:
-            # Unpack the first 4 bytes to get namesize
-            _, _, _, namesize = unpack(EVENT_FMT, data[:EVENT_SIZE])
-            ini_pos = EVENT_SIZE
-            end_pos = EVENT_SIZE + namesize
-            name = data[ini_pos:end_pos].split(b"\x00", 1)[0]
-            name = name.decode("utf-8")
+                if name:
+                    file_path = str(os.path.join(dir, name))
+                    if file_path in files:
+                        execute = (
+                            command.replace("@", file_path) if "@" in command else command
+                        )
+                        subprocess.run("clear", shell=True, check=False)
+                        subprocess.run(execute, shell=True, check=False)
 
-            if name:
-                file_path = str(os.path.join(dir, name))
-                if file_path in files:
-                    execute = command.replace("@", file_path) if "@" in command else command
-                    subprocess.run("clear", shell=True, check=False)
-                    subprocess.run(execute, shell=True, check=False)
-
-                    libc_call(libc.inotify_add_watch, fd, encoded_path, IN_MODIFY)
+                        libc_call(libc.inotify_add_watch, fd, encoded_path, IN_MODIFY)
+    except Exception as exc:
+        print(exc)
 
 
 def _start(dirs, files, command):
