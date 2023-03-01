@@ -1,7 +1,7 @@
 """ devwatch """
 # TODO
 # - Replace yaml for stdlib library
-# - Output about file changed
+# - Bug with several executions
 
 import argparse
 import glob
@@ -105,6 +105,25 @@ def read_all(fd):
     return data
 
 
+def prGreen(skk):
+    print("\033[92m {}\033[00m" .format(skk))
+
+
+def prCyan(skk):
+    print("\033[96m {}\033[00m" .format(skk))
+
+
+def output(file_path, execute):
+    line_1 = f"File changed: {file_path}"
+    line_2 = f"Command executed: {execute}"
+    box_len = max(len(line_1), len(line_2))
+    prCyan("=" * box_len)
+    prGreen(line_1)
+    prGreen(line_2)
+    prCyan("=" * box_len)
+    print("")
+
+
 def target(dir, files, command, queue):
     try:
         fd = libc_call(libc.inotify_init)
@@ -142,6 +161,7 @@ def target(dir, files, command, queue):
                             else command
                         )
                         subprocess.run("clear", shell=True, check=False)
+                        output(file_path, execute)
                         subprocess.run(execute, shell=True, check=False)
 
                         libc_call(libc.inotify_add_watch, fd, encoded_path, IN_MODIFY)
