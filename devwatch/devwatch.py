@@ -1,20 +1,25 @@
 """ devwatch """
+# TODO
+# - Replace yaml for stdlib library
+# - Output about file changed
 
 import argparse
 import glob
 import os
+import signal
 import subprocess
 import sys
-import time
-from concurrent.futures import ThreadPoolExecutor
 from ctypes import CDLL, c_int, get_errno
 from ctypes.util import find_library
 from errno import EINTR
 from fcntl import ioctl
 from pathlib import Path
+from queue import Queue
 from select import poll
 from struct import calcsize, unpack
 from termios import FIONREAD
+from threading import Thread
+from itertools import chain
 
 import yaml
 
@@ -24,6 +29,10 @@ libc = CDLL(libc_so or "libc.so.6", use_errno=True)
 EVENT_FMT = "iIII"
 EVENT_SIZE = calcsize(EVENT_FMT)
 IN_MODIFY = 0x00000002
+CLOSER = Queue()
+MAX_DIRS = 100
+POLLER_TIMEOUT = 500
+TOTAL_THREADS = 0
 
 
 def load_config(target):
@@ -63,8 +72,11 @@ def load_config(target):
         print("Error: missing `command` entry for target: {target}")
         sys.exit(1)
 
-    files = glob.glob(cfg[target]["files"], recursive=True)
+    conf_files = cfg[target]["files"].split(" ")
+    file_list = [glob.glob(pattern, recursive=True) for pattern in conf_files]
+    files = list(chain(*file_list))
     dirs = list(set([os.path.dirname(file) for file in files]))
+    dirs = [(dir if dir else ".") for dir in dirs]
     command = cfg[target]["command"]
     return dirs, files, command
 
@@ -93,7 +105,7 @@ def read_all(fd):
     return data
 
 
-def target(dir, files, command):
+def target(dir, files, command, queue):
     try:
         fd = libc_call(libc.inotify_init)
         poller = poll()
@@ -104,8 +116,15 @@ def target(dir, files, command):
 
         while True:
             data = None
-            if poller.poll(None):
+            if poller.poll(POLLER_TIMEOUT):
                 data = read_all(fd)
+
+            try:
+                if queue.get(block=False) == "STOP":
+                    break
+            except Exception:
+                pass
+
             if data:
                 # Unpack the first 4 bytes to get namesize
                 _, _, _, namesize = unpack(EVENT_FMT, data[:EVENT_SIZE])
@@ -118,7 +137,9 @@ def target(dir, files, command):
                     file_path = str(os.path.join(dir, name))
                     if file_path in files:
                         execute = (
-                            command.replace("@", file_path) if "@" in command else command
+                            command.replace("@", file_path)
+                            if "@" in command
+                            else command
                         )
                         subprocess.run("clear", shell=True, check=False)
                         subprocess.run(execute, shell=True, check=False)
@@ -129,12 +150,24 @@ def target(dir, files, command):
 
 
 def _start(dirs, files, command):
-    MAX_DIRS = 100
-    _dirs = dirs[:MAX_DIRS]
-    workers = len(_dirs)
+    global CLOSER
+    global MAX_DIRS
+    global TOTAL_THREADS
 
-    with ThreadPoolExecutor(max_workers=workers + 1) as executor:
-        [executor.submit(target, dir, files, command) for dir in _dirs]
+    if len(dirs) > MAX_DIRS:
+        raise Exception(f"Too many directories: {len(dirs)}")
+
+    TOTAL_THREADS = len(dirs)
+    for dir in dirs:
+        t = Thread(target=target, args=(dir, files, command, CLOSER))
+        t.start()
+
+
+def handler(signum, frame):
+    global STOPPER
+    global TOTAL_THREADS
+    for _ in range(TOTAL_THREADS):
+        CLOSER.put("STOP")
 
 
 def main(target):
@@ -148,6 +181,7 @@ def main(target):
         )
         sys.exit(1)
 
+    signal.signal(signal.SIGINT, handler)
     _start(dirs, files, command)
 
 
