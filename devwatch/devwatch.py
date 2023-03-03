@@ -1,7 +1,4 @@
 """ devwatch """
-# TODO
-# - Replace yaml for stdlib library
-# - Bug with several executions
 
 import argparse
 import glob

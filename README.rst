@@ -30,6 +30,7 @@ Installation
      will be execute
 
    * Warning: if no files exists for the target, the program will exit. 
+
 ===========
 Basic usage
 ===========
@@ -55,9 +56,15 @@ Tested on
 * Debian 11
 * Centos 7
 
+===========
+Inspired by
+===========
+https://github.com/chrisjbillington/inotify_simple
+
 ====
 TODO
 ====
+* Replace pyyaml for stdlib library package
 * Hot reload configuration file
 * Unit tests
 * FreeBSD/OpenBSD/NetBSD support
