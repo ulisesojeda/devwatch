@@ -65,6 +65,7 @@ https://github.com/chrisjbillington/inotify_simple
 TODO
 ====
 * Replace pyyaml for stdlib library package
+* Check for maximum number of files to watch
 * Hot reload configuration file
 * Unit tests
 * FreeBSD/OpenBSD/NetBSD support

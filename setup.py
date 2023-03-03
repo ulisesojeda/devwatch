@@ -2,16 +2,22 @@
 
 from setuptools import setup
 
+with open("README.rst", "r") as f:
+    long_description = f.read()
+
 setup(
-   name='DevWatch',
-   version='0.1.0',
+   name='devwatch',
+   version='0.0.3',
    author='Ulises Ojeda',
-   author_email='ulises.odysseus22@gmail.com',
+   url='https://github.com/ulisesojeda/devwatch',
    packages=['devwatch'],
    scripts=['bin/devwatch'],
    license='LICENSE',
    description='Speed up your coding by running a command on every saved change',
+   long_description=long_description,
+   long_description_content_type="text/plain",
    install_requires=[
        "pyyaml",
    ],
+   python_requires='>=3.2',
 )

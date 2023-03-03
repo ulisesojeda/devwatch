@@ -11,7 +11,7 @@ from ctypes.util import find_library
 from errno import EINTR
 from fcntl import ioctl
 from pathlib import Path
-from queue import Queue
+from queue import Queue, Empty
 from select import poll
 from struct import calcsize, unpack
 from termios import FIONREAD
@@ -72,8 +72,8 @@ def load_config(target):
     conf_files = cfg[target]["files"].split(" ")
     file_list = [glob.glob(pattern, recursive=True) for pattern in conf_files]
     files = list(chain(*file_list))
-    dirs = list(set([os.path.dirname(file) for file in files]))
-    dirs = [(dir if dir else ".") for dir in dirs]
+    dirs = list({os.path.dirname(file) for file in files})
+    dirs = [(_dir if _dir else ".") for _dir in dirs]
     command = cfg[target]["command"]
     return target, dirs, files, command
 
@@ -81,9 +81,9 @@ def load_config(target):
 def libc_call(function, *args):
     """Wrapper which raises errors and retries on EINTR."""
     while True:
-        rc = function(*args)
-        if rc != -1:
-            return rc
+        ret_code = function(*args)
+        if ret_code != -1:
+            return ret_code
         errno = get_errno()
         print(f"ERRNO: {errno}")
         if errno != EINTR:
@@ -91,98 +91,92 @@ def libc_call(function, *args):
             raise OSError(errno, os.strerror(errno))
 
 
-def read_all(fd):
+def read_all(file_descriptor):
     """Read all available data from file description"""
     bytes_avail = c_int()
-    ioctl(fd, FIONREAD, bytes_avail)
+    ioctl(file_descriptor, FIONREAD, bytes_avail)
     if not bytes_avail.value:
         data = b""
     else:
-        data = os.read(fd, bytes_avail.value)
+        data = os.read(file_descriptor, bytes_avail.value)
     return data
 
 
-def prGreen(skk):
-    print("\033[92m {}\033[00m" .format(skk))
-
-
-def prCyan(skk):
-    print("\033[96m {}\033[00m" .format(skk))
-
-
 def output(file_path, execute):
+    """Print output"""
+    def print_green(text):
+        print(f"\033[92m {text}\033[00m")
+
+    def print_cyan(text):
+        print(f"\033[96m {text}\033[00m")
+
     line_1 = f"File changed: {file_path}"
     line_2 = f"Command executed: {execute}"
     box_len = max(len(line_1), len(line_2))
-    prCyan("=" * box_len)
-    prGreen(line_1)
-    prGreen(line_2)
-    prCyan("=" * box_len)
+    print_cyan("=" * box_len)
+    print_green(line_1)
+    print_green(line_2)
+    print_cyan("=" * box_len)
     print("")
 
 
-def target(dir, files, command, queue):
-    try:
-        fd = libc_call(libc.inotify_init)
-        poller = poll()
-        poller.register(fd)
+def target_fn(directory, files, command, queue):
+    """Thread target function"""
+    file_descriptor = libc_call(libc.inotify_init)
+    poller = poll()
+    poller.register(file_descriptor)
 
-        encoded_path = dir.encode("utf-8")
-        libc_call(libc.inotify_add_watch, fd, encoded_path, IN_MODIFY)
+    encoded_path = directory.encode("utf-8")
+    libc_call(libc.inotify_add_watch, file_descriptor, encoded_path, IN_MODIFY)
 
-        while True:
-            data = None
-            if poller.poll(POLLER_TIMEOUT):
-                data = read_all(fd)
+    while True:
+        data = None
+        if poller.poll(POLLER_TIMEOUT):
+            data = read_all(file_descriptor)
 
-            try:
-                if queue.get(block=False) == "STOP":
-                    break
-            except Exception:
-                pass
+        try:
+            if queue.get(block=False) == "STOP":
+                break
+        except Empty:
+            pass
 
-            if data:
-                # Unpack the first 4 bytes to get namesize
-                _, _, _, namesize = unpack(EVENT_FMT, data[:EVENT_SIZE])
-                ini_pos = EVENT_SIZE
-                end_pos = EVENT_SIZE + namesize
-                name = data[ini_pos:end_pos].split(b"\x00", 1)[0]
-                name = name.decode("utf-8")
+        if data:
+            # Unpack the first 4 bytes to get namesize
+            _, _, _, namesize = unpack(EVENT_FMT, data[:EVENT_SIZE])
+            ini_pos = EVENT_SIZE
+            end_pos = EVENT_SIZE + namesize
+            name = data[ini_pos:end_pos].split(b"\x00", 1)[0]
+            name = name.decode("utf-8")
 
-                if name:
-                    file_path = str(os.path.join(dir, name))
-                    if file_path in files:
-                        execute = (
-                            command.replace("@", file_path)
-                            if "@" in command
-                            else command
-                        )
-                        subprocess.run("clear", shell=True, check=False)
-                        output(file_path, execute)
-                        subprocess.run(execute, shell=True, check=False)
+            if name:
+                file_path = str(os.path.join(directory, name))
+                if file_path in files:
+                    execute = (
+                        command.replace("@", file_path)
+                        if "@" in command
+                        else command
+                    )
+                    subprocess.run("clear", shell=True, check=False)
+                    output(file_path, execute)
+                    subprocess.run(execute, shell=True, check=False)
 
-                        libc_call(libc.inotify_add_watch, fd, encoded_path, IN_MODIFY)
-    except Exception as exc:
-        print(exc)
+                    libc_call(libc.inotify_add_watch, file_descriptor, encoded_path, IN_MODIFY)
 
 
 def _start(dirs, files, command):
-    global CLOSER
-    global MAX_DIRS
     global TOTAL_THREADS
 
     if len(dirs) > MAX_DIRS:
-        raise Exception(f"Too many directories: {len(dirs)}")
+        raise ValueError(f"Too many directories: {len(dirs)}")
 
     TOTAL_THREADS = len(dirs)
-    for dir in dirs:
-        t = Thread(target=target, args=(dir, files, command, CLOSER))
-        t.start()
+    for directory in dirs:
+        thread = Thread(target=target_fn, args=(directory, files, command, CLOSER))
+        thread.start()
 
 
 def handler(signum, frame):
-    global STOPPER
-    global TOTAL_THREADS
+    """Signal handler"""
     for _ in range(TOTAL_THREADS):
         CLOSER.put("STOP")
 
