@@ -29,10 +29,13 @@ Installation
      modified file. In that example, when file `tests/foo.py` is amended `pytest tests/foo.py`
      will be execute
 
+   * Warning: if no files exists for the target, the program will exit. 
 ===========
 Basic usage
 ===========
 ``devwatch -t main``
+
+* If no target is specified, the program will run the first target defined in the configurationfile
 
 ===================
 System requirements
@@ -48,9 +51,9 @@ Python requirements
 =========
 Tested on
 =========
-* Ubuntu x86_64
-* Debian ?
-* Centos ?
+* Ubuntu 20.04, 22.04 x64
+* Debian 11 x64
+* Centos 7 x84
 * Arch ?
 * Alpine ?
 * Gentoo ?
@@ -62,11 +65,8 @@ Tested on
 ====
 TODO
 ====
-* Allow to define several files separated by space
-* Allow to define several files by glob expansion
 * Hot reload configuration file
 * Unit tests
 * Create PyPi package
-* Install as a separated script to be run as `devwatch`
 * FreeBSD/OpenBSD/NetBSD support
 * MacOS support

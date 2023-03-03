@@ -78,7 +78,7 @@ def load_config(target):
     dirs = list(set([os.path.dirname(file) for file in files]))
     dirs = [(dir if dir else ".") for dir in dirs]
     command = cfg[target]["command"]
-    return dirs, files, command
+    return target, dirs, files, command
 
 
 def libc_call(function, *args):
@@ -192,12 +192,11 @@ def handler(signum, frame):
 
 def main(target):
     """Main function"""
-    dirs, files, command = load_config(target)
+    sel_target, dirs, files, command = load_config(target)
 
     if not files:
         print(
-            f"Error: invalid target: {target}."
-            f"Path not found: {files}. Check {CONF_NAME}"
+            f"Error: Files not found for target: {sel_target}"
         )
         sys.exit(1)
 
