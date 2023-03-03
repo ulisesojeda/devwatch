@@ -33,40 +33,32 @@ Installation
 ===========
 Basic usage
 ===========
-``devwatch -t main``
+`devwatch -t main`
 
-* If no target is specified, the program will run the first target defined in the configurationfile
+* If no target is specified, the program will run the first target defined in the configuration file
 
 ===================
 System requirements
 ===================
-* Unix-like system
+* Linux x64
 * Python 3.X
 
 ===================
 Python requirements
 ==================
-* yaml >= ?
+* pyyaml
 
 =========
 Tested on
 =========
-* Ubuntu 20.04, 22.04 x64
-* Debian 11 x64
-* Centos 7 x84
-* Arch ?
-* Alpine ?
-* Gentoo ?
-* RHL ?
-* Void ?
-* Kali ?
-* Fedora ?
+* Ubuntu 20.04, 22.04
+* Debian 11
+* Centos 7
 
 ====
 TODO
 ====
 * Hot reload configuration file
 * Unit tests
-* Create PyPi package
 * FreeBSD/OpenBSD/NetBSD support
 * MacOS support
