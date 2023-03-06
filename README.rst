@@ -35,8 +35,13 @@ Installation
 Basic usage
 ===========
 `devwatch -t main`
+    Execute `main` target
 
-* If no target is specified, the program will run the first target defined in the configuration file
+`devwatch -f 'dir/**/*.txt' -c 'cat @'`
+    Watch for changes on all `.txt` files inside `dir` and its subdirectories and execute `cat` on the modified file
+
+`devwatch`
+    Execute the first defined target
 
 ===================
 System requirements
@@ -67,6 +72,7 @@ TODO
 * Replace pyyaml for stdlib library package
 * Check for maximum number of files to watch
 * Hot reload configuration file
-* Unit tests
 * FreeBSD/OpenBSD/NetBSD support
 * MacOS support
+* Autocomplete
+* Github actions

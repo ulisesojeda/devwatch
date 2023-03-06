@@ -32,6 +32,15 @@ POLLER_TIMEOUT = 500
 TOTAL_THREADS = 0
 
 
+def glob_files(files_l):
+    files_split = files_l.split(" ")
+    file_list = [glob.glob(pattern, recursive=True) for pattern in files_split]
+    files = list(chain(*file_list))
+    dir_list = list({os.path.dirname(file) for file in files})
+    dirs = [(_dir if _dir else ".") for _dir in dir_list]
+    return dirs, files
+
+
 def load_config(target):
     """Load configuration"""
     local = Path.joinpath(Path.cwd(), CONF_NAME)
@@ -69,11 +78,7 @@ def load_config(target):
         print("Error: missing `command` entry for target: {target}")
         sys.exit(1)
 
-    conf_files = cfg[target]["files"].split(" ")
-    file_list = [glob.glob(pattern, recursive=True) for pattern in conf_files]
-    files = list(chain(*file_list))
-    dirs = list({os.path.dirname(file) for file in files})
-    dirs = [(_dir if _dir else ".") for _dir in dirs]
+    dirs, files = glob_files(cfg[target]["files"])
     command = cfg[target]["command"]
     return target, dirs, files, command
 
@@ -150,7 +155,7 @@ def target_fn(directory, files, command, queue):
 
             if name:
                 file_path = str(os.path.join(directory, name))
-                if file_path in files:
+                if file_path in files or (directory == '.' and file_path.replace("./", "") in files):
                     execute = (
                         command.replace("@", file_path)
                         if "@" in command
@@ -181,9 +186,14 @@ def handler(signum, frame):
         CLOSER.put("STOP")
 
 
-def main(target):
+def main(target, files_p, command_p):
     """Main function"""
-    sel_target, dirs, files, command = load_config(target)
+    if files_p and command_p:
+        sel_target = "CUSTOM_BY_ARGS"
+        dirs, files = glob_files(files_p)
+        command = command_p
+    else:
+        sel_target, dirs, files, command = load_config(target)
 
     if not files:
         print(
@@ -191,12 +201,18 @@ def main(target):
         )
         sys.exit(1)
 
-    signal.signal(signal.SIGINT, handler)
+    try:
+        signal.signal(signal.SIGINT, handler)
+    except ValueError:
+        pass
+
     _start(dirs, files, command)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-t", "--target")
+    parser.add_argument("-f", "--files")
+    parser.add_argument("-c", "--command")
     argv = parser.parse_args()
-    main(argv.target)
+    main(argv.target, argv.files, argv.command)
