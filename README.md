@@ -59,7 +59,7 @@ Create **.devwatchrc.yml** on your project directory or home folder
 
      * **command**: Command to execute when a file change is detected
    * When watching on directories like on target **tests**, you can use **@** to reference the
-     modified file. In that example, when file **tests/foo.py** is amended **pytest tests/foo.py**
+     modified file. In this example, when file **tests/foo.py** is amended **pytest tests/foo.py**
      will be execute
 
    * Warning: if no files exists for the target, the program will exit. 
