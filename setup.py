@@ -2,7 +2,7 @@
 
 from setuptools import setup
 
-with open("README.rst", "r") as f:
+with open("README.md", "r") as f:
     long_description = f.read()
 
 setup(
@@ -15,7 +15,7 @@ setup(
    license='LICENSE',
    description='Speed up your coding by running a command on every saved change',
    long_description=long_description,
-   long_description_content_type="text/plain",
+   long_description_content_type="text/markdown",
    install_requires=[
        "pyyaml",
    ],
