@@ -16,25 +16,25 @@ $ pip install devwatch
 
 ## Basic usage
 
-#### Execute **python main.py** when **main.py** is modified
+* Execute **python main.py** when **main.py** is modified
   ```
   $ devwatch -f 'main.py' -c 'python main.py'
   ```
 
-#### Watch for changes on all **.txt** files inside **dir** and its subdirectories and execute **cat** on the modified file
+* Watch for changes on all **.txt** files inside **dir** and its subdirectories and execute **cat** on the modified file
   ```
   $ devwatch -f 'dir/**/*.txt' -c 'cat @'
   ```
 
-#### Execute **main** target
-```
-$ devwatch -t main
-```
+* Execute **main** target
+  ```
+  $ devwatch -t main
+  ```
 
-#### Execute the first defined target
-```
-$ devwatch
-```
+* Execute the first defined target
+  ```
+  $ devwatch
+  ```
 
 ## Configuration file
 
