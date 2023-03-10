@@ -7,7 +7,7 @@ with open("README.rst", "r") as f:
 
 setup(
    name='devwatch',
-   version='0.0.5',
+   version='0.0.6',
    author='Ulises Ojeda',
    url='https://github.com/ulisesojeda/devwatch',
    packages=['devwatch'],

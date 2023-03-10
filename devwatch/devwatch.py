@@ -27,9 +27,21 @@ EVENT_FMT = "iIII"
 EVENT_SIZE = calcsize(EVENT_FMT)
 IN_MODIFY = 0x00000002
 CLOSER = Queue()
-MAX_DIRS = 100
+MAX_WATCHES = 100
 POLLER_TIMEOUT = 500
 TOTAL_THREADS = 0
+
+
+def load_max_watches():
+    """Load max watches"""
+    global MAX_WATCHES
+    muw_file = "/proc/sys/fs/inotify/max_user_watches"
+
+    if os.path.exists(muw_file):
+        with open(muw_file, "r") as f:
+            MAX_WATCHES = int(f.read())
+    else:
+        MAX_WATCHES = 8192
 
 
 def glob_files(files_l):
@@ -178,7 +190,7 @@ def target_fn(directory, files, command, queue):
 def _start(dirs, files, command):
     global TOTAL_THREADS
 
-    if len(dirs) > MAX_DIRS:
+    if len(dirs) > MAX_WATCHES:
         raise ValueError(f"Too many directories: {len(dirs)}")
 
     TOTAL_THREADS = len(dirs)
@@ -195,6 +207,9 @@ def handler(signum, frame):
 
 def main(target, files_p, command_p):
     """Main function"""
+
+    load_max_watches()
+
     if files_p and command_p:
         sel_target = "CUSTOM_BY_ARGS"
         dirs, files = glob_files(files_p)
