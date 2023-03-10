@@ -33,6 +33,7 @@ TOTAL_THREADS = 0
 
 
 def glob_files(files_l):
+    """Get directories and files from glob pattern"""
     files_split = files_l.split(" ")
     file_list = [glob.glob(pattern, recursive=True) for pattern in files_split]
     files = list(chain(*file_list))
@@ -109,6 +110,7 @@ def read_all(file_descriptor):
 
 def output(file_path, execute):
     """Print output"""
+
     def print_green(text):
         print(f"\033[92m {text}\033[00m")
 
@@ -155,17 +157,22 @@ def target_fn(directory, files, command, queue):
 
             if name:
                 file_path = str(os.path.join(directory, name))
-                if file_path in files or (directory == '.' and file_path.replace("./", "") in files):
+                if file_path in files or (
+                    directory == "." and file_path.replace("./", "") in files
+                ):
                     execute = (
-                        command.replace("@", file_path)
-                        if "@" in command
-                        else command
+                        command.replace("@", file_path) if "@" in command else command  # noqa: E501
                     )
                     subprocess.run("clear", shell=True, check=False)
                     output(file_path, execute)
                     subprocess.run(execute, shell=True, check=False)
 
-                    libc_call(libc.inotify_add_watch, file_descriptor, encoded_path, IN_MODIFY)
+                    libc_call(
+                        libc.inotify_add_watch,
+                        file_descriptor,
+                        encoded_path,
+                        IN_MODIFY
+                    )
 
 
 def _start(dirs, files, command):
@@ -176,7 +183,7 @@ def _start(dirs, files, command):
 
     TOTAL_THREADS = len(dirs)
     for directory in dirs:
-        thread = Thread(target=target_fn, args=(directory, files, command, CLOSER))
+        thread = Thread(target=target_fn, args=(directory, files, command, CLOSER))  # noqa: E501
         thread.start()
 
 
@@ -196,9 +203,7 @@ def main(target, files_p, command_p):
         sel_target, dirs, files, command = load_config(target)
 
     if not files:
-        print(
-            f"Error: Files not found for target: {sel_target}"
-        )
+        print(f"Error: Files not found for target: {sel_target}")
         sys.exit(1)
 
     try:
