@@ -2,6 +2,7 @@
 
 Speed up your coding by running your program, test suite, linter, etc on every saved changes. 
 
+![Build Status](https://github.com/ulisesojeda/devwatch/actions/workflows/actions.yml/badge.svg)
 
 ## Installation
 
